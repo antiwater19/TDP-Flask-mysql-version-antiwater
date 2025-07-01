@@ -4,6 +4,7 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, R
 from werkzeug.utils import secure_filename
 import boto3
 import pymysql
+import json
 from contextlib import contextmanager
 
 # 🔑 AWS Secrets Manager에서 시크릿 불러오기 함수
