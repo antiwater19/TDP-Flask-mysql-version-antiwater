@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Callback</title>
+</head>
+<body>
+    <h3>로그인 처리 중...</h3>
+    <script>
+        window.onload = function () {
+            const hash = window.location.hash;
+            const token = new URLSearchParams(hash.replace('#', '?')).get('id_token');
+            if (token) {
+                localStorage.setItem('token', token);
+                window.location.href = "/main_page";
+            } else {
+                alert("로그인에 실패했습니다.");
+                window.location.href = "/login";
+            }
+        }
+    </script>
+</body>
+</html>
