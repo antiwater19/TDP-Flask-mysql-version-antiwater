@@ -18,6 +18,7 @@ DATABASE_CONFIG = {
     'autocommit': True
 }
 
+
 # DATABASE_CONFIG = {
 #     'host': os.environ.get('127.0.0.4:3306'),
 #     'user': os.environ.get('anti'),
