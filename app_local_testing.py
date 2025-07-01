@@ -6,28 +6,14 @@ import boto3
 import pymysql
 from contextlib import contextmanager
 
-# 🔑 AWS Secrets Manager에서 시크릿 불러오기 함수
-def get_secret(secret_name, region_name="ap-northeast-1"):
-    session = boto3.session.Session()
-    client = session.client('secretsmanager', region_name=region_name)
-
-    response = client.get_secret_value(SecretId=secret_name)
-    secret = json.loads(response['SecretString'])
-    return secret
-
-
-# 🔐 시크릿 로드 (시크릿 이름: flask/app1)
-secret = get_secret('flask/app1')
-
 app = Flask(__name__)
-app.secret_key = secret['flask_secret']
 
 # 환경변수에서 설정 로드 (로컬 개발용)
 DATABASE_CONFIG = {
-    'host': secret['host'],
-    'user': secret['username'],
-    'password': secret['password'],
-    'database': secret['dbname'],
+    'host': '127.0.0.4',
+    'user': 'anti',
+    'password': 'admin',
+    'database': 'frodo',
     'charset': 'utf8mb4',
     'autocommit': True
 }
