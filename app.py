@@ -272,6 +272,16 @@ def login_redirect():
 def logout():
     response = make_response(jsonify({'result': 'success'}))
     response.set_cookie('auth_token', '', expires=0)
+
+    # 실제 사용하는 로그아웃 URL
+    logout_url = (
+        "https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/logout"
+        "?client_id=1h7auh8al7i6mu64i3b2uoq78s"
+        "&logout_uri=https://www.antiwater19.co.kr/"
+    )
+
+    response.headers["Location"] = logout_url
+    response.status_code = 302
     return response
 
 @app.route('/main_page')
