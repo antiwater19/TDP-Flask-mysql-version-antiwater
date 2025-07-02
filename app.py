@@ -4,6 +4,7 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, R
 from jwt import PyJWKClient
 import pymysql
 import json
+import boto3
 from contextlib import contextmanager
 from dotenv import load_dotenv
 
@@ -40,7 +41,7 @@ COGNITO_APP_CLIENT_ID = secret['cognito_app_client_id'] #os.environ.get("COGNITO
 COGNITO_APP_CLIENT_SECRET = secret['cognito_app_client_secret'] #os.environ.get("COGNITO_APP_CLIENT_SECRET")
 COGNITO_DOMAIN = secret['cognito_domain'] #os.environ.get("COGNITO_DOMAIN")
 COGNITO_KEYS_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json" # f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
-REDIRECT_URI = "http://localhost:5000/callback"
+REDIRECT_URI = "https://www.antiwater19.co.kr/callback"
 
 # === DB 설정 ===
 DATABASE_CONFIG = {
@@ -508,6 +509,10 @@ def update_view(idx):
 def get_flag():
     # 임시로 0 반환 (실제 로직은 구현 필요)
     return jsonify({'flag': 0})
+
+@app.route('/healthz')
+def health_check():
+    return "OK", 200
 
 if __name__ == '__main__':
     app.run('0.0.0.0', port=5000, debug=True)
