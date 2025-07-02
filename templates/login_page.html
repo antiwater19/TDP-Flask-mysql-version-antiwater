@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>Login | TIL.D.P</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        html, body {
+        html,
+        body {
             height: 100%;
             margin: 0;
             padding: 0;
@@ -15,6 +17,7 @@
             position: relative;
             overflow: hidden;
         }
+
         .img-bg {
             position: fixed;
             top: 0;
@@ -28,10 +31,17 @@
             background-position: center;
             animation: animar_fondo 25s infinite alternate linear;
         }
+
         @keyframes animar_fondo {
-            from { transform: scale(1) translate(0px, 0px); }
-            to { transform: scale(1.05) translate(20px, 10px); }
+            from {
+                transform: scale(1) translate(0px, 0px);
+            }
+
+            to {
+                transform: scale(1.05) translate(20px, 10px);
+            }
         }
+
         .container {
             position: relative;
             z-index: 1;
@@ -40,6 +50,7 @@
             align-items: center;
             height: 100vh;
         }
+
         .login-wrapper {
             max-width: 400px;
             width: 100%;
@@ -49,10 +60,12 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
             text-align: center;
         }
+
         h2 {
             margin-bottom: 30px;
             color: #333;
         }
+
         .login-btn {
             margin: 10px 0;
             padding: 12px 24px;
@@ -63,49 +76,69 @@
             color: white;
             width: 100%;
         }
-        .basic { background-color: #26C6DA; }
-        .kakao { background-color: #FEE500; color: #3C1E1E; font-weight: bold; }
-        .naver { background-color: #03C75A; }
+
+        .basic {
+            background-color: #26C6DA;
+        }
+
+        .kakao {
+            background-color: #FEE500;
+            color: #3C1E1E;
+            font-weight: bold;
+        }
+
+        .naver {
+            background-color: #03C75A;
+        }
+
         .signup-link {
             margin-top: 20px;
             font-size: 14px;
         }
+
         .signup-link a {
             color: #007bff;
             text-decoration: none;
         }
+
         .signup-link a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
+
 <body>
-<div class="img-bg"></div>
-<div class="container">
-    <div class="login-wrapper">
-        <h2>TIL 로그인</h2>
+    <div class="img-bg"></div>
+    <div class="container">
+        <div class="login-wrapper">
+            <h2>TIL 로그인</h2>
 
-        <!-- 일반 로그인 -->
-        <a href="https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/login?response_type=code&client_id=72h79fpnij7tm0k6dj1ibbfavm&redirect_uri=http://localhost:5000/callback">
-        <button class="login-btn basic">일반 로그인</button>
-        </a>
+            <!-- 일반 로그인 -->
+            <a
+                href="https://ap-northeast-1vz7thqayk.auth.ap-northeast-1.amazoncognito.com/login?response_type=code&client_id=72h79fpnij7tm0k6dj1ibbfavm&redirect_uri=http://localhost:5000/callback">
+                <button class="login-btn basic">일반 로그인</button>
+            </a>
 
-        <!-- 카카오 로그인 -->
-        <a href="https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/oauth2/authorize?identity_provider=KAKAO&client_id=72h79fpnij7tm0k6dj1ibbfavm&response_type=code&redirect_uri=http://localhost:5000/callback&scope=email%20openid%20profile">
-        <button class="login-btn kakao">카카오로 로그인</button>
-        </a>
+            <!-- 카카오 로그인 -->
+            <a
+                href="https://ap-northeast-1vz7thqayk.auth.ap-northeast-1.amazoncognito.com/oauth2/authorize?identity_provider=KAKAO&client_id=72h79fpnij7tm0k6dj1ibbfavm&response_type=code&redirect_uri=http://localhost:5000/callback&scope=email%20openid%20profile">
+                <button class="login-btn kakao">카카오로 로그인</button>
+            </a>
 
-        <!-- 네이버 로그인 -->
-        <a href="https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/oauth2/authorize?identity_provider=Naver&response_type=code&client_id=72h79fpnij7tm0k6dj1ibbfavm&redirect_uri=http://localhost:5000/callback&scope=openid account_email profile_nickname profile_image">
-            <button class="login-btn naver">네이버로 로그인</button>
-        </a>
+            <!-- 네이버 로그인 -->
+            <a
+                href="https://ap-northeast-1vz7thqayk.auth.ap-northeast-1.amazoncognito.com/oauth2/authorize?identity_provider=Naver&response_type=code&client_id=72h79fpnij7tm0k6dj1ibbfavm&redirect_uri=http://localhost:5000/callback&scope=openid account_email profile_nickname profile_image">
+                <button class="login-btn naver">네이버로 로그인</button>
+            </a>
 
-        <!-- 회원가입 링크 -->
-        <div class="signup-link">
-            계정이 없으신가요?
-            <a href="https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/signup?client_id=pl9p6g3v5j9klitn3np7srm8i&response_type=code&redirect_uri=http://localhost:5000/callback">회원가입</a>
+            <!-- 회원가입 링크 -->
+            <div class="signup-link">
+                계정이 없으신가요?
+                <a
+                    href="https://ap-northeast-1vz7thqayk.auth.ap-northeast-1.amazoncognito.com/signup?client_id=pl9p6g3v5j9klitn3np7srm8i&response_type=code&redirect_uri=http://localhost:5000/callback">회원가입</a>
+            </div>
         </div>
     </div>
-</div>
 </body>
+
 </html>

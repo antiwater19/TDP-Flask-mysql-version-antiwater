@@ -34,7 +34,7 @@ app = Flask(__name__)
 app.secret_key = secret['flask_secret']
 
 # === AWS Cognito 설정 ===
-COGNITO_REGION = "ap-northeast-2" # 여기 리전 수정해서 써야함
+COGNITO_REGION = "ap-northeast-1" # 여기 리전 수정해서 써야함
 COGNITO_USER_POOL_ID = secret['cognito_user_pool_id'] #os.environ.get("COGNITO_USER_POOL_ID")
 COGNITO_APP_CLIENT_ID = secret['cognito_app_client_id'] #os.environ.get("COGNITO_APP_CLIENT_ID")
 COGNITO_APP_CLIENT_SECRET = secret['cognito_app_client_secret'] #os.environ.get("COGNITO_APP_CLIENT_SECRET")
