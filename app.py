@@ -267,12 +267,28 @@ def home_redirect():
 def login_redirect():
     return redirect('/')
 
-# 로그아웃 라우터 추가
-@app.route('/logout', methods=['POST'])
+@app.route('/logout', methods=['POST', 'GET'])
 def logout():
+    # Cognito 설정값이 존재하는지 검증
+    if not COGNITO_DOMAIN or not COGNITO_APP_CLIENT_ID:
+        return jsonify({'result': 'fail', 'msg': 'Cognito 설정이 누락되었습니다.'}), 500
+
+    # 쿠키 삭제 (보안 옵션 포함)
     response = make_response(jsonify({'result': 'success'}))
-    response.set_cookie('auth_token', '', expires=0)
+    response.set_cookie('auth_token', '', expires=0, secure=True, httponly=True)
+
+    # Cognito 로그아웃 URL (세션까지 완전히 제거)
+    logout_url = (
+        f"https://{COGNITO_DOMAIN}/logout"
+        f"?client_id={COGNITO_APP_CLIENT_ID}"
+        f"&logout_uri=https://www.antiwater19.co.kr/"
+        f"&global=true"
+    )
+
+    response.headers["Location"] = logout_url
+    response.status_code = 302
     return response
+
 
 @app.route('/main_page')
 @login_check

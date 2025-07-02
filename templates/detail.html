@@ -346,24 +346,21 @@
         }
 
         function sign_out() {
-            // localStorage 토큰 제거
-            localStorage.removeItem('token');
-            
-            // 쿠키 제거 (서버에서 처리하도록 요청)
-            $.ajax({
-                type: "POST",
-                url: "/logout",
-                success: function() {
-                    alert('로그아웃!');
-                    window.location.href = "/";
-                },
-                error: function() {
-                    // 실패해도 로그아웃 처리
-                    alert('로그아웃!');
-                    window.location.href = "/";
-                }
-            });
-        }
+        localStorage.removeItem('token');
+    
+        $.ajax({
+            type: "POST",
+            url: "/logout",
+            success: function (response) {
+                // 로그아웃 성공 시 처리
+                window.location.href = "https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/logout?client_id=1h7auh8al7i6mu64i3b2uoq78s&logout_uri=https://www.antiwater19.co.kr/";
+            },
+            error: function (error) {
+                // 로그아웃 실패 시 처리
+                console.error("Logout failed:", error);
+            }
+        });
+}
     </script>
 
     <style>
@@ -426,7 +423,6 @@
             background-color: rgba(211, 211, 211, 0.2)
         }
 
-        }
         .new-box {
             border-color: DodgerBlue;
             background-color: rgba(30, 144, 255, 0.2);
@@ -462,8 +458,9 @@
 
         .hr6 {
             border: none;
-            border: 5px;
-            double orange;
+            border-width: 5px;
+            border-style: double;
+            border-color: orange;
         }
 
     </style>
