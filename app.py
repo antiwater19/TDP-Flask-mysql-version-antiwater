@@ -34,12 +34,12 @@ app = Flask(__name__)
 app.secret_key = secret['flask_secret']
 
 # === AWS Cognito 설정 ===
-COGNITO_REGION = "ap-northeast-2"
-COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
-COGNITO_APP_CLIENT_ID = os.environ.get("COGNITO_APP_CLIENT_ID")
-COGNITO_APP_CLIENT_SECRET = os.environ.get("COGNITO_APP_CLIENT_SECRET")
-COGNITO_DOMAIN = os.environ.get("COGNITO_DOMAIN")
-COGNITO_KEYS_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+COGNITO_REGION = "ap-northeast-2" # 여기 리전 수정해서 써야함
+COGNITO_USER_POOL_ID = secret['cognito_user_pool_id'] #os.environ.get("COGNITO_USER_POOL_ID")
+COGNITO_APP_CLIENT_ID = secret['cognito_app_client_id'] #os.environ.get("COGNITO_APP_CLIENT_ID")
+COGNITO_APP_CLIENT_SECRET = secret['cognito_app_client_secret'] #os.environ.get("COGNITO_APP_CLIENT_SECRET")
+COGNITO_DOMAIN = secret['cognito_domain'] #os.environ.get("COGNITO_DOMAIN")
+COGNITO_KEYS_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json" # f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
 REDIRECT_URI = "http://localhost:5000/callback"
 
 # === DB 설정 ===
