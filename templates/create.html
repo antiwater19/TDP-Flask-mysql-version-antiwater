@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <title>Title</title>
-    <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet"
           integrity="sha384-F3w7mX95PdgyTmZZMECAngseQB83DfGTowi0iMjiWaeVhAn4FJkqJByhZMI3AhiU" crossorigin="anonymous">
@@ -14,9 +14,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
             integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
             crossorigin="anonymous"></script>
+
     <!-- cookie -->
     <script type="text/javascript"
             src="https://cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.min.js"></script>
+
     <style>
         body {
             padding-bottom: 30px;
@@ -27,11 +29,10 @@
         }
 
         .nav-link {
-
             margin-left: 100px;
         }
-
     </style>
+
     <script>
         $(document).ready(function () {
             // 토큰 동기화
@@ -60,15 +61,14 @@
                 beforeSend: function (xhr) {
                     let token = localStorage.getItem('token');
                     if (!token) {
-                        // 쿠키에서도 확인
                         let cookies = document.cookie.split('; ');
                         let authCookie = cookies.find(row => row.startsWith('auth_token='));
                         if (authCookie) {
                             token = authCookie.split('=')[1];
-                            localStorage.setItem('token', token); // 동기화
+                            localStorage.setItem('token', token);
                         }
                     }
-                    
+
                     if (token) {
                         xhr.setRequestHeader('Authorization', token);
                     } else {
@@ -77,6 +77,7 @@
                     }
                 }
             });
+
             read_user_profile();
         });
 
@@ -112,25 +113,24 @@
             $('.github_id_append').val(user_info['github_id']);
         }
 
-
         function create_til() {
-            let title = $('#title').val()
-            let content = $('#content').val()
+            let title = $('#title').val();
+            let content = $('#content').val();
 
             $.ajax({
                 type: "POST",
                 url: "/til",
                 data: {til_title_give: title, til_content_give: content},
-                success: function (response) { // 성공하면
-                    alert("작성완료")
-                    window.location.href = "/til_board"
+                success: function (response) {
+                    alert("작성완료");
+                    window.location.href = "/til_board";
                 }
             });
         }
 
         $(document).on('click', '#btnList', function (e) {
             e.preventDefault();
-            window.location.href = "/til_board"
+            window.location.href = "/til_board";
         });
 
         function goback() {
@@ -138,27 +138,13 @@
         }
 
         function sign_out() {
-            // localStorage 토큰 제거
             localStorage.removeItem('token');
-            
-            // 쿠키 제거 (서버에서 처리하도록 요청)
-            $.ajax({
-                type: "POST",
-                url: "/logout",
-                success: function() {
-                    alert('로그아웃!');
-                    window.location.href = "/";
-                },
-                error: function() {
-                    // 실패해도 로그아웃 처리
-                    alert('로그아웃!');
-                    window.location.href = "/";
-                }
-            });
+            document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            window.location.href = "https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/logout?client_id=1h7auh8al7i6mu64i3b2uoq78s&logout_uri=https://www.antiwater19.co.kr/";
         }
-
     </script>
 </head>
+
 <body>
 <nav class="navbar navbar-expand-lg navbar-light bg-light">
     <div class="container-fluid">
@@ -169,7 +155,7 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
             <div id="navbar-nav" class="navbar-nav">
-                <a class="nav-link " href="./til_board">Write TIL</a>
+                <a class="nav-link" href="./til_board">Write TIL</a>
                 <a class="nav-link" href="./mytil_page">My TIL</a>
                 <a class="nav-link" href="https://github.com/">Github</a>
                 <a class="nav-link" href="./my_page">myPage</a>
@@ -179,6 +165,7 @@
         </div>
     </div>
 </nav>
+
 <article>
     <div class="container" role="main">
         <h2>board Form</h2>
@@ -187,13 +174,11 @@
                 <label for="title">제목</label>
                 <input type="text" class="form-control" name="title" id="title" placeholder="제목을 입력해 주세요">
             </div>
-            <p><span>작성자: </span><label for="content" class="user_nickname_append"></label>
-            <p>
+            <p><span>작성자: </span><label for="content" class="user_nickname_append"></label></p>
             <div class="mb-3">
                 <label for="content">내용</label>
                 <textarea class="form-control" rows="5" name="content" id="content"
                           placeholder="내용을 입력해 주세요"></textarea>
-
             </div>
             <div class="mb-3">
                 <label for="tag">TAG</label>

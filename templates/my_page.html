@@ -150,20 +150,11 @@
             // localStorage 토큰 제거
             localStorage.removeItem('token');
             
-            // 쿠키 제거 (서버에서 처리하도록 요청)
-            $.ajax({
-                type: "POST",
-                url: "/logout",
-                success: function() {
-                    alert('로그아웃!');
-                    window.location.href = "/";
-                },
-                error: function() {
-                    // 실패해도 로그아웃 처리
-                    alert('로그아웃!');
-                    window.location.href = "/";
-                }
-            });
+            // 쿠키 제거 (만료 날짜를 과거로 설정하여 삭제)
+            document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            
+            // AWS Cognito 로그아웃 URL로 리다이렉트
+            window.location.href = "https://ap-northeast-2dhfxgbel1.auth.ap-northeast-2.amazoncognito.com/logout?client_id=1h7auh8al7i6mu64i3b2uoq78s&logout_uri=https://www.antiwater19.co.kr/";
         }
     </script>
     <style>
