@@ -3,6 +3,7 @@ import os, jwt, datetime, requests, base64
 from flask import Flask, render_template, jsonify, request, redirect, url_for, Response, g, make_response
 from jwt import PyJWKClient
 import pymysql
+import json
 from contextlib import contextmanager
 from dotenv import load_dotenv
 
@@ -16,7 +17,21 @@ print(f"COGNITO_APP_CLIENT_SECRET: {os.environ.get('COGNITO_APP_CLIENT_SECRET')}
 print(f"COGNITO_DOMAIN: {os.environ.get('COGNITO_DOMAIN')}")
 print("========================")
 
+# 🔑 AWS Secrets Manager에서 시크릿 불러오기 함수
+def get_secret(secret_name, region_name="ap-northeast-1"):
+    session = boto3.session.Session()
+    client = session.client('secretsmanager', region_name=region_name)
+
+    response = client.get_secret_value(SecretId=secret_name)
+    secret = json.loads(response['SecretString'])
+    return secret
+
+
+# 🔐 시크릿 로드 (시크릿 이름: flask/app1)
+secret = get_secret('flask/app1')
+
 app = Flask(__name__)
+app.secret_key = secret['flask_secret']
 
 # === AWS Cognito 설정 ===
 COGNITO_REGION = "ap-northeast-2"
@@ -29,10 +44,10 @@ REDIRECT_URI = "http://localhost:5000/callback"
 
 # === DB 설정 ===
 DATABASE_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST'),
-    'user': os.environ.get('MYSQL_USER'),
-    'password': os.environ.get('MYSQL_PASSWORD'),
-    'database': os.environ.get('MYSQL_DB'),
+    'host': secret['host'],
+    'user': secret['username'],
+    'password': secret['password'],
+    'database': secret['dbname'],
     'charset': 'utf8mb4',
     'autocommit': True
 }
