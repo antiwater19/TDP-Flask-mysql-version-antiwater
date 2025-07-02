@@ -34,16 +34,14 @@ secret = get_secret('flask/app1')
 app = Flask(__name__)
 app.secret_key = secret['flask_secret']
 
-# AWS Secrets Manager에서 로드 함으로 
-# 사용할려는 인스턴스 IAM role에 권한을 주고 수정은 AWS 콘솔에서 직접 해주면 된다.
 # === AWS Cognito 설정 ===
 COGNITO_REGION = "ap-northeast-1" # 여기 리전 수정해서 써야함
-COGNITO_USER_POOL_ID = secret['cognito_user_pool_id'] 
-COGNITO_APP_CLIENT_ID = secret['cognito_app_client_id'] 
-COGNITO_APP_CLIENT_SECRET = secret['cognito_app_client_secret'] 
-COGNITO_DOMAIN = secret['cognito_domain'] 
+COGNITO_USER_POOL_ID = secret['cognito_user_pool_id'] #os.environ.get("COGNITO_USER_POOL_ID")
+COGNITO_APP_CLIENT_ID = secret['cognito_app_client_id'] #os.environ.get("COGNITO_APP_CLIENT_ID")
+COGNITO_APP_CLIENT_SECRET = secret['cognito_app_client_secret'] #os.environ.get("COGNITO_APP_CLIENT_SECRET")
+COGNITO_DOMAIN = secret['cognito_domain'] #os.environ.get("COGNITO_DOMAIN")
 COGNITO_KEYS_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json" # f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
-REDIRECT_URI = secret['redirect_uri'] 
+REDIRECT_URI = "https://www.antiwater19.co.kr/callback"
 
 # === DB 설정 ===
 DATABASE_CONFIG = {
