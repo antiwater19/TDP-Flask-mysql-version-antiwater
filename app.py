@@ -1,623 +1,498 @@
 from functools import wraps
-import os, jwt, datetime, hashlib
-from flask import Flask, render_template, jsonify, request, redirect, url_for, Response, g
-from werkzeug.utils import secure_filename
-import boto3
+import os, jwt, datetime, requests, base64
+from flask import Flask, render_template, jsonify, request, redirect, url_for, Response, g, make_response
+from jwt import PyJWKClient
 import pymysql
 from contextlib import contextmanager
+from dotenv import load_dotenv
+
+load_dotenv()  # .env 파일 로드
+
+# 환경변수 로드 확인
+print("=== 환경변수 로드 확인 ===")
+print(f"COGNITO_USER_POOL_ID: {os.environ.get('COGNITO_USER_POOL_ID')}")
+print(f"COGNITO_APP_CLIENT_ID: {os.environ.get('COGNITO_APP_CLIENT_ID')}")
+print(f"COGNITO_APP_CLIENT_SECRET: {os.environ.get('COGNITO_APP_CLIENT_SECRET')}")
+print(f"COGNITO_DOMAIN: {os.environ.get('COGNITO_DOMAIN')}")
+print("========================")
 
 app = Flask(__name__)
 
-# 환경변수에서 설정 로드 (로컬 개발용)
+# === AWS Cognito 설정 ===
+COGNITO_REGION = "ap-northeast-2"
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
+COGNITO_APP_CLIENT_ID = os.environ.get("COGNITO_APP_CLIENT_ID")
+COGNITO_APP_CLIENT_SECRET = os.environ.get("COGNITO_APP_CLIENT_SECRET")
+COGNITO_DOMAIN = os.environ.get("COGNITO_DOMAIN")
+COGNITO_KEYS_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+REDIRECT_URI = "http://localhost:5000/callback"
+
+# === DB 설정 ===
 DATABASE_CONFIG = {
-    'host': '127.0.0.4',
-    'user': 'anti',
-    'password': 'admin',
-    'database': 'frodo',
+    'host': os.environ.get('MYSQL_HOST'),
+    'user': os.environ.get('MYSQL_USER'),
+    'password': os.environ.get('MYSQL_PASSWORD'),
+    'database': os.environ.get('MYSQL_DB'),
     'charset': 'utf8mb4',
     'autocommit': True
 }
 
-# DATABASE_CONFIG = {
-#     'host': os.environ.get('127.0.0.4:3306'),
-#     'user': os.environ.get('anti'),
-#     'password': os.environ.get('admin'),
-#     'database': os.environ.get('frodo'),
-#     'charset': 'utf8mb4',
-#     'autocommit': True
-# }
-
-SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-here')
-
 @contextmanager
 def get_db_connection():
-    """데이터베이스 연결 컨텍스트 매니저"""
-    connection = None
+    conn = pymysql.connect(**DATABASE_CONFIG)
     try:
-        connection = pymysql.connect(**DATABASE_CONFIG)
-        yield connection
-    except Exception as e:
-        if connection:
-            connection.rollback()
-        raise e
+        yield conn
     finally:
-        if connection:
-            connection.close()
+        conn.close()
 
-def init_database():
-    """데이터베이스 테이블 초기화"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        # users 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id VARCHAR(50) UNIQUE NOT NULL,
-                user_password VARCHAR(64) NOT NULL,
-                user_nickname VARCHAR(50) NOT NULL,
-                github_id VARCHAR(50) DEFAULT '',
-                user_profile_pic VARCHAR(255) DEFAULT '',
-                user_profile_pic_real VARCHAR(255) DEFAULT 'static/profile_pics/profile_placeholder.png',
-                user_profile_info TEXT ,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # til 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS til (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                til_idx INT UNIQUE NOT NULL,
-                til_title VARCHAR(255) NOT NULL,
-                til_user VARCHAR(50) NOT NULL,
-                til_content TEXT NOT NULL,
-                til_day TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                til_update_day TIMESTAMP NULL,
-                til_view BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (til_user) REFERENCES users(user_id) ON DELETE CASCADE,
-                INDEX idx_til_user (til_user),
-                INDEX idx_til_day (til_day)
-            )
-        ''')
-        
-        # comments 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS comments (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                comment_idx INT UNIQUE NOT NULL,
-                til_idx INT NOT NULL,
-                user_id VARCHAR(50) NOT NULL,
-                user_nickname VARCHAR(50) NOT NULL,
-                til_comment TEXT NOT NULL,
-                til_comment_day TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (til_idx) REFERENCES til(til_idx) ON DELETE CASCADE,
-                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-                INDEX idx_til_idx (til_idx)
-            )
-        ''')
-        
-        # likes 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS likes (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                til_idx INT NOT NULL,
-                user_id VARCHAR(50) NOT NULL,
-                type VARCHAR(20) DEFAULT 'heart',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (til_idx) REFERENCES til(til_idx) ON DELETE CASCADE,
-                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-                UNIQUE KEY unique_like (til_idx, user_id, type),
-                INDEX idx_til_idx (til_idx)
-            )
-        ''')
-        
-        conn.commit()
+# === Cognito 토큰 검증 ===
+def verify_cognito_token(token):
+    jwks_client = PyJWKClient(COGNITO_KEYS_URL)
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    payload = jwt.decode(token, signing_key.key, algorithms=["RS256"], audience=COGNITO_APP_CLIENT_ID)
+    return payload
 
 def login_check(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
-        access_token = request.headers.get("Authorization")
-        if access_token is not None:
-            try:
-                payload = jwt.decode(access_token, SECRET_KEY, algorithms=["HS256"])
-            except jwt.InvalidTokenError:
-                return Response(status=401)
-
-            if payload is None:
-                return Response(status=401)
-
-            user_id = payload["id"]
-            g.user_id = user_id
-            g.user = get_user_info(user_id)
-        else:
-            g.user_id = "비회원"
-            g.user = None
+    def decorated(*args, **kwargs):
+        # Authorization 헤더에서 토큰 확인
+        token = request.headers.get("Authorization")
+        
+        # 헤더에 없으면 쿠키에서 확인
+        if not token:
+            token = request.cookies.get('auth_token')
+            
+        print(f"Received token: {token}")
+        if not token:
+            print("No token provided")
+            return redirect('/')
+        try:
+            payload = verify_cognito_token(token)
+            print(f"Token payload: {payload}")
+            g.user_id = payload.get('cognito:username')
+            ensure_user_exists(g.user_id)
+        except Exception as e:
+            print(f"Token verification failed: {e}")
+            return redirect('/')
         return f(*args, **kwargs)
+    return decorated
 
-    return decorated_function
+# === 유저 확인 및 정보 ===
+def ensure_user_exists(user_id):
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users WHERE user_id = %s", (user_id,))
+        if cur.fetchone()[0] == 0:
+            cur.execute("INSERT INTO users (user_id, user_nickname) VALUES (%s, %s)", (user_id, user_id))
 
 def get_user_info(user_id):
-    """사용자 정보 조회"""
     with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
-        return cursor.fetchone()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+        return cur.fetchone()
 
-def get_next_til_idx():
-    """다음 TIL 인덱스 생성"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT MAX(til_idx) FROM til")
-        result = cursor.fetchone()
-        return (result[0] + 1) if result[0] else 1
+# === Cognito 로그인 후 처리 ===
+@app.route('/callback')
+def callback():
+    print("=== CALLBACK DEBUG START ===")
+    print(f"Request args: {dict(request.args)}")
+    print(f"Request form: {dict(request.form)}")
+    print(f"Request URL: {request.url}")
+    print(f"Request method: {request.method}")
+    
+    code = request.args.get('code')
+    error = request.args.get('error')
+    error_description = request.args.get('error_description')
+    
+    print(f"Authorization Code: {code}")
+    print(f"Error: {error}")
+    print(f"Error description: {error_description}")
+    
+    if error:
+        print(f"❌ OAuth Error: {error} - {error_description}")
+        return f"OAuth Error: {error} - {error_description}", 400
+    
+    if not code:
+        print("❌ No authorization code found")
+        return "Authorization code not found", 400
 
-def get_next_comment_idx():
-    """다음 댓글 인덱스 생성"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT MAX(comment_idx) FROM comments")
-        result = cursor.fetchone()
-        return (result[0] + 1) if result[0] else 1
+    token_url = f"https://{COGNITO_DOMAIN}/oauth2/token"
+    
+    # 디버그 정보 출력
+    print(f"COGNITO_APP_CLIENT_ID: {COGNITO_APP_CLIENT_ID}")
+    print(f"COGNITO_APP_CLIENT_SECRET: {'***masked***' if COGNITO_APP_CLIENT_SECRET else 'None'}")
+    print(f"COGNITO_DOMAIN: {COGNITO_DOMAIN}")
+    print(f"Token URL: {token_url}")
+    
+    # Client Secret이 있는 경우와 없는 경우 구분
+    if COGNITO_APP_CLIENT_SECRET:
+        # Basic Auth 헤더 생성
+        auth_string = f"{COGNITO_APP_CLIENT_ID}:{COGNITO_APP_CLIENT_SECRET}"
+        auth_bytes = auth_string.encode('ascii')
+        auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+        
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': f'Basic {auth_b64}'
+        }
+        
+        data = {
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': REDIRECT_URI
+        }
+        
+        print(f"Using Basic Auth: {auth_b64[:20]}...")
+        print(f"Request headers: {headers}")
+        print(f"Request data: {data}")
+    else:
+        # Client Secret 없는 경우
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        data = {
+            'grant_type': 'authorization_code',
+            'client_id': COGNITO_APP_CLIENT_ID,
+            'code': code,
+            'redirect_uri': REDIRECT_URI
+        }
+        print("No Client Secret - using client_id in body")
+        print(f"Request headers: {headers}")
+        print(f"Request data: {data}")
 
-# 라우트 정의
+    print("🔄 Requesting token from Cognito...")
+    response = requests.post(token_url, data=data, headers=headers)
+    
+    print(f"Token response status: {response.status_code}")
+    print(f"Token response headers: {dict(response.headers)}")
+    print(f"Token response body: {response.text}")
+    
+    if response.status_code != 200:
+        print(f"❌ Token request failed: {response.status_code} - {response.text}")
+        return f"Failed to get token: {response.text}", 400
+
+    tokens = response.json()
+    id_token = tokens.get('id_token')
+    access_token = tokens.get('access_token')
+    
+    print(f"✅ Received tokens: {list(tokens.keys())}")
+    print(f"ID Token (first 50 chars): {id_token[:50] if id_token else 'None'}...")
+    print(f"Access Token (first 50 chars): {access_token[:50] if access_token else 'None'}...")
+
+    # ID 토큰 페이로드 디코딩 (검증 없이)
+    if id_token:
+        try:
+            import json
+            # JWT는 header.payload.signature 형태
+            parts = id_token.split('.')
+            if len(parts) >= 2:
+                payload_part = parts[1]
+                # Base64 패딩 추가
+                payload_part += '=' * (4 - len(payload_part) % 4)
+                payload_bytes = base64.b64decode(payload_part)
+                payload = json.loads(payload_bytes)
+                print(f"🔍 ID Token payload: {json.dumps(payload, indent=2)}")
+                
+                # 중요한 클레임들 확인
+                print(f"📧 Email in token: {payload.get('email', 'NOT_FOUND')}")
+                print(f"👤 Name in token: {payload.get('name', 'NOT_FOUND')}")
+                print(f"🏷️ Nickname in token: {payload.get('nickname', 'NOT_FOUND')}")
+                print(f"🆔 Username in token: {payload.get('cognito:username', 'NOT_FOUND')}")
+                
+        except Exception as e:
+            print(f"❌ Token decode error: {e}")
+
+    # 카카오 API 직접 호출로 확인
+    if access_token:
+        print("🔄 Calling Kakao API directly...")
+        try:
+            kakao_api_url = "https://kapi.kakao.com/v2/user/me"
+            kakao_headers = {"Authorization": f"Bearer {access_token}"}
+            kakao_response = requests.get(kakao_api_url, headers=kakao_headers)
+            print(f"Kakao API response status: {kakao_response.status_code}")
+            if kakao_response.status_code == 200:
+                kakao_data = kakao_response.json()
+                print(f"🎯 Kakao API response: {json.dumps(kakao_data, indent=2, ensure_ascii=False)}")
+                
+                # 카카오에서 실제로 제공하는 데이터 확인
+                kakao_account = kakao_data.get('kakao_account', {})
+                print(f"📧 Kakao email: {kakao_account.get('email', 'NOT_FOUND')}")
+                print(f"👤 Kakao name: {kakao_account.get('name', 'NOT_FOUND')}")
+                print(f"🏷️ Kakao nickname: {kakao_account.get('profile', {}).get('nickname', 'NOT_FOUND')}")
+            else:
+                print(f"❌ Kakao API error: {kakao_response.text}")
+        except Exception as e:
+            print(f"❌ Kakao API call error: {e}")
+
+    print("=== CALLBACK DEBUG END ===")
+
+    # 토큰을 쿠키와 localStorage 모두에 저장하도록 수정
+    response_html = f'''
+    <script>
+        localStorage.setItem('token', '{id_token}');
+        window.location.href = '/main_page';
+    </script>
+    '''
+    response = make_response(response_html)
+    response.set_cookie('auth_token', id_token, secure=False, httponly=False)
+    
+    return response
+
 @app.route('/')
-@app.route('/login')
 def login_page():
     return render_template('login_page.html')
 
-@app.route('/signup_page')
-def signup_page():
-    return render_template('signup_page.html')
+# 경로 리다이렉트 추가
+@app.route('/home')
+def home_redirect():
+    return redirect('/main_page')
 
-@app.route('/mytil_page')
+@app.route('/login')
+def login_redirect():
+    return redirect('/')
+
+# 로그아웃 라우터 추가
+@app.route('/logout', methods=['POST'])
+def logout():
+    response = make_response(jsonify({'result': 'success'}))
+    response.set_cookie('auth_token', '', expires=0)
+    return response
+
+@app.route('/main_page')
 @login_check
-def mytil_page():
-    return render_template('mytil_page.html')
+def main_page():
+    return render_template('home.html')
 
+@app.route('/user', methods=['GET'])
+@login_check
+def read_user():
+    user = get_user_info(g.user_id)
+    if user:
+        user.pop('user_password', None)
+        return jsonify({'result': 'success', 'user_info': user})
+    return jsonify({'result': 'fail'})
+
+@app.route('/update_profile', methods=['POST'])
+@login_check
+def update_profile():
+    nickname = request.form['nickname_give']
+    github_id = request.form['github_id_give']
+    about = request.form['about_give']
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE users SET user_nickname = %s, github_id = %s, user_profile_info = %s
+            WHERE user_id = %s
+        """, (nickname, github_id, about, g.user_id))
+    return jsonify({"result": "success", 'msg': '프로필 업데이트 완료'})
+
+@app.route('/til', methods=['POST'])
+@login_check
+def create_til():
+    data = request.form
+    til_title = data['til_title_give']
+    til_content = data['til_content_give']
+    til_user = g.user_id
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(MAX(til_idx), 0)+1 FROM til")
+        til_idx = cur.fetchone()[0]
+        cur.execute("""
+            INSERT INTO til (til_idx, til_title, til_user, til_content)
+            VALUES (%s, %s, %s, %s)
+        """, (til_idx, til_title, til_user, til_content))
+    return jsonify({'msg': '작성 완료'})
+
+@app.route('/til/<idx>', methods=['GET'])
+@login_check
+def get_til(idx):
+    with get_db_connection() as conn:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT * FROM til WHERE til_idx = %s", (int(idx),))
+        return jsonify({'til': cur.fetchone()})
+
+@app.route('/til/<idx>', methods=['PUT'])
+@login_check
+def update_til(idx):
+    data = request.form or request.json
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE til SET til_title = %s, til_content = %s WHERE til_idx = %s AND til_user = %s
+        """, (data['til_title_give'], data['til_content_give'], int(idx), g.user_id))
+    return jsonify({'msg': '수정 완료'})
+
+@app.route('/til/<idx>', methods=['DELETE'])
+@login_check
+def delete_til(idx):
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM til WHERE til_idx = %s AND til_user = %s", (int(idx), g.user_id))
+    return jsonify({'msg': '삭제 완료'})
+
+@app.route('/til/board', methods=['GET'])
+@login_check
+def til_board():
+    with get_db_connection() as conn:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT * FROM til ORDER BY til_idx DESC")
+        all_til = cur.fetchall()
+    return jsonify({'til_count': len(all_til), 'all_til': all_til})
+
+@app.route('/til/user', methods=['POST'])
+@login_check
+def user_til():
+    user_id = request.form['til_user_give']
+    with get_db_connection() as conn:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT * FROM til WHERE til_user = %s ORDER BY til_idx DESC", (user_id,))
+        return jsonify({'my_til': cur.fetchall()})
+
+@app.route('/til_board_detail')
+@login_check
+def til_board_detail():
+    keyword = request.args.get("keyword")
+    setting = request.args.get("setting")
+    col = {'제목': 'til_title', '작성자': 'til_user', '내용': 'til_content'}.get(setting, 'til_title')
+    with get_db_connection() as conn:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute(f"SELECT * FROM til WHERE {col} LIKE %s", (f"%{keyword}%",))
+        return jsonify({'temp': cur.fetchall()})
+
+@app.route('/til/comment/<idx>', methods=['GET'])
+@login_check
+def get_comment(idx):
+    with get_db_connection() as conn:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT * FROM comments WHERE til_idx = %s", (int(idx),))
+        return jsonify({'comment': cur.fetchall(), 'writer': g.user_id})
+
+@app.route('/til/comment', methods=['POST'])
+@login_check
+def post_comment():
+    comment = request.form['comment_give']
+    date = request.form['date_give']
+    til_idx = request.form['til_idx_give']
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(MAX(comment_idx), 0)+1 FROM comments")
+        comment_idx = cur.fetchone()[0]
+        cur.execute("""
+            INSERT INTO comments (comment_idx, til_idx, til_comment, til_comment_day, user_nickname)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (comment_idx, til_idx, comment, date, g.user_id))
+    return jsonify({'msg': '댓글 작성 완료'})
+
+@app.route('/til/comment', methods=['DELETE'])
+@login_check
+def delete_comment():
+    comment_idx = request.form['comment_idx_give']
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM comments WHERE comment_idx = %s AND user_nickname = %s", (int(comment_idx), g.user_id))
+    return jsonify({'msg': '댓글 삭제 완료'})
+
+@app.route('/update_like', methods=['POST'])
+@login_check
+def update_like():
+    til_idx = request.form['til_idx_give']
+    action = request.form['action_give']
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        if action == 'like':
+            cur.execute("INSERT IGNORE INTO likes (user_id, til_idx) VALUES (%s, %s)", (g.user_id, til_idx))
+        elif action == 'unlike':
+            cur.execute("DELETE FROM likes WHERE user_id = %s AND til_idx = %s", (g.user_id, til_idx))
+        cur.execute("SELECT COUNT(*) FROM likes WHERE til_idx = %s", (til_idx,))
+        count = cur.fetchone()[0]
+    return jsonify({'count': count})
+
+@app.route('/heart/<idx>', methods=['GET'])
+@login_check
+def get_heart(idx):
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM likes WHERE til_idx = %s", (int(idx),))
+        count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM likes WHERE til_idx = %s AND user_id = %s", (int(idx), g.user_id))
+        liked = cur.fetchone()[0] > 0
+    return jsonify({'count': count, 'action': liked})
+
+@app.route('/til/rank', methods=['GET'])
+@login_check
+def til_rank():
+    with get_db_connection() as conn:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT til_user AS _id, COUNT(*) AS til_score FROM til GROUP BY til_user ORDER BY til_score DESC")
+        return jsonify({'til_rank': cur.fetchall()})
+
+# === 추가 라우트들 (원본에서 누락된 것들) ===
 @app.route('/create_page')
 @login_check
 def create_page():
     return render_template('create.html')
 
 @app.route('/detail')
-@login_check
-def detail_page():
+@login_check  
+def detail():
     return render_template('detail.html')
-
-@app.route('/main_page')
-@login_check
-def home():
-    return render_template('home.html')
-
-@app.route('/flag', methods=['GET'])
-@login_check
-def read_flag():
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
-        cursor.execute("""
-            SELECT COUNT(*) FROM til 
-            WHERE til_user = %s AND DATE(til_day) = %s
-        """, (g.user_id, today))
-        
-        flag = 1 if cursor.fetchone()[0] > 0 else 0
-        return jsonify({'flag': flag})
 
 @app.route('/til_board')
 @login_check
-def list_page():
+def til_board_page():
     return render_template('til_board.html')
-
-@app.route('/til/comment', methods=['POST'])
-@login_check
-def create_comment():
-    user_info = get_user_info(g.user_id)
-    comment_receive = request.form['comment_give']
-    date_receive = request.form['date_give']
-    til_idx_receive = int(request.form['til_idx_give'])
-    
-    comment_idx = get_next_comment_idx()
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO comments (comment_idx, til_idx, user_id, user_nickname, til_comment, til_comment_day)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (comment_idx, til_idx_receive, user_info["user_id"], 
-              user_info["user_nickname"], comment_receive, date_receive))
-        
-    return jsonify({'msg': '댓글작성 완료'})
-
-@app.route('/til/comment/<idx>', methods=['GET'])
-@login_check
-def read_comment(idx):
-    user_info = get_user_info(g.user_id)
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("""
-            SELECT comment_idx, til_idx, til_comment, til_comment_day, user_nickname
-            FROM comments WHERE til_idx = %s
-            ORDER BY created_at ASC
-        """, (int(idx),))
-        comments = cursor.fetchall()
-        
-    writer = user_info['user_nickname'] if user_info else ''
-    return jsonify({'comment': comments, 'writer': writer})
-
-@app.route('/til/comment', methods=['DELETE'])
-@login_check
-def delete_comment():
-    comment_idx_receive = int(request.form['comment_idx_give'])
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM comments WHERE comment_idx = %s", (comment_idx_receive,))
-        
-    return jsonify({'result': "success", 'msg': '삭제 완료'})
 
 @app.route('/til_board_detail_page')
 @login_check
-def search_detail_page():
+def til_board_detail_page():
     return render_template('til_board_detail.html')
 
-@app.route('/til_board_detail')
+@app.route('/mytil_page')
 @login_check
-def search():
-    keyword = request.args.get("keyword")
-    setting = request.args.get("setting")
-    
-    # 설정에 따른 컬럼 매핑
-    column_map = {
-        '제목': 'til_title',
-        '작성자': 'til_user',
-        '내용': 'til_content'
-    }
-    
-    search_column = column_map.get(setting, 'til_title')
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute(f"""
-            SELECT til_idx, til_title, til_user, til_content, til_day
-            FROM til WHERE {search_column} LIKE %s AND til_view = TRUE
-            ORDER BY til_day DESC
-        """, (f'%{keyword}%',))
-        results = cursor.fetchall()
-        
-    return jsonify({'result': "success", 'temp': results})
+def mytil_page():
+    return render_template('mytil_page.html')
 
 @app.route('/my_page')
 @login_check
 def my_page():
     return render_template('my_page.html')
 
-@app.route('/til/board', methods=['GET'])
+@app.route('/status/<idx>', methods=['GET'])
 @login_check
-def read_all_til():
+def get_status(idx):
     with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("""
-            SELECT til_idx, til_title, til_user, til_content, til_day, til_view
-            FROM til WHERE til_view = TRUE
-            ORDER BY til_day DESC
-        """)
-        all_til = cursor.fetchall()
-        
-        cursor.execute("SELECT COUNT(*) FROM til WHERE til_view = TRUE")
-        til_count = cursor.fetchone()['COUNT(*)']
-        
-    return jsonify({'result': "success", 'all_til': all_til, "til_count": til_count})
-
-@app.route('/til/user', methods=['POST'])
-@login_check
-def read_user_til():
-    til_user_receive = request.form['til_user_give']
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("""
-            SELECT til_idx, til_title, til_user, til_content, til_day, til_view
-            FROM til WHERE til_user = %s
-            ORDER BY til_day DESC
-        """, (til_user_receive,))
-        my_til = cursor.fetchall()
-        
-    return jsonify({'result': 'success', 'my_til': my_til})
-
-@app.route('/til/rank', methods=['GET'])
-@login_check
-def rank_til():
-    with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("""
-            SELECT til_user as _id, COUNT(*) as til_score
-            FROM til
-            GROUP BY til_user
-            ORDER BY til_score DESC
-        """)
-        agg_result = cursor.fetchall()
-        
-    return jsonify({'result': "success", 'til_rank': agg_result})
-
-@app.route('/til', methods=['POST'])
-@login_check
-def create_til():
-    user_info = get_user_info(g.user_id)
-    til_title_receive = request.form['til_title_give']
-    til_content_receive = request.form['til_content_give']
-    
-    til_idx = get_next_til_idx()
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO til (til_idx, til_title, til_user, til_content, til_day, til_view)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (til_idx, til_title_receive, user_info['user_id'], 
-              til_content_receive, datetime.datetime.now(), True))
-        
-    return jsonify({'msg': 'til 작성 완료!'})
-
-@app.route('/til/<idx>', methods=['GET'])
-@login_check
-def read_til(idx):
-    with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("""
-            SELECT til_idx, til_title, til_user, til_content, til_day, til_update_day, til_view
-            FROM til WHERE til_idx = %s
-        """, (int(idx),))
-        til = cursor.fetchone()
-        
-    return jsonify({"til": til})
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM til WHERE til_idx = %s AND til_user = %s", (int(idx), g.user_id))
+        status = cur.fetchone()[0] > 0
+    return jsonify({'status': status})
 
 @app.route('/til/user/<idx>', methods=['GET'])
 @login_check
-def read_til_user(idx):
+def get_til_user(idx):
     with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT til_user FROM til WHERE til_idx = %s", (int(idx),))
-        til_result = cursor.fetchone()
-        
-        if til_result:
-            cursor.execute("""
-                SELECT user_nickname, github_id, user_profile_info
-                FROM users WHERE user_id = %s
-            """, (til_result['til_user'],))
-            user_info = cursor.fetchone()
-            
-            return jsonify({
-                "user_nickname": user_info['user_nickname'],
-                'github_id': user_info['github_id'],
-                'user_profile_info': user_info['user_profile_info']
-            })
-    
-    return jsonify({"error": "User not found"}), 404
-
-@app.route('/heart/<idx>', methods=['GET'])
-@login_check
-def read_heart(idx):
-    user_id = g.user_id
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT COUNT(*) FROM likes 
-            WHERE til_idx = %s AND type = 'heart'
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("""
+            SELECT u.user_nickname, u.github_id as githhub_id, u.user_profile_info
+            FROM til t
+            JOIN users u ON t.til_user = u.user_id
+            WHERE t.til_idx = %s
         """, (int(idx),))
-        count = cursor.fetchone()[0]
-        
-        cursor.execute("""
-            SELECT COUNT(*) FROM likes 
-            WHERE user_id = %s AND til_idx = %s
-        """, (user_id, int(idx)))
-        action = cursor.fetchone()[0] > 0
-        
-    return jsonify({'count': count, 'action': action})
-
-@app.route('/status/<idx>', methods=['GET'])
-@login_check
-def read_status(idx):
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT til_user FROM til WHERE til_idx = %s", (int(idx),))
-        result = cursor.fetchone()
-        
-        status = result[0] == g.user_id if result else False
-        
-    return jsonify({"status": status})
-
-@app.route('/til/<idx>', methods=['DELETE'])
-@login_check
-def delete_til(idx):
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM til WHERE til_idx = %s", (int(idx),))
-        
-    return jsonify({'msg': 'til 삭제 완료!'})
-
-@app.route('/til/<idx>', methods=['PUT'])
-@login_check
-def update_til(idx):
-    til_title_receive = request.form['til_title_give']
-    til_content_receive = request.form['til_content_give']
-    current_time = datetime.datetime.now()
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE til SET til_title = %s, til_content = %s, til_update_day = %s
-            WHERE til_idx = %s
-        """, (til_title_receive, til_content_receive, current_time, int(idx)))
-        
-    return jsonify({'msg': '수정 완료!'})
+        result = cur.fetchone()
+        if result:
+            return jsonify(result)
+        return jsonify({'user_nickname': '', 'githhub_id': '', 'user_profile_info': ''})
 
 @app.route('/til/view/<idx>', methods=['PUT'])
 @login_check
 def update_view(idx):
     with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT til_view FROM til WHERE til_idx = %s", (int(idx),))
-        result = cursor.fetchone()
-        
-        if result:
-            current_view = result[0]
-            new_view = not current_view
-            
-            cursor.execute("""
-                UPDATE til SET til_view = %s WHERE til_idx = %s
-            """, (new_view, int(idx)))
-            
-    return jsonify({'msg': '변경 완료!'})
+        cur = conn.cursor()
+        cur.execute("UPDATE til SET til_view = 1 - COALESCE(til_view, 0) WHERE til_idx = %s AND til_user = %s", (int(idx), g.user_id))
+    return jsonify({'msg': '공개 설정 변경 완료'})
 
-@app.route('/update_like', methods=['POST'])
+@app.route('/flag', methods=['GET'])
 @login_check
-def update_like():
-    til_idx_receive = int(request.form["til_idx_give"])
-    type_receive = request.form["type_give"]
-    action_receive = request.form["action_give"]
-    user_info = get_user_info(g.user_id)
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        if action_receive == "like":
-            cursor.execute("""
-                INSERT IGNORE INTO likes (til_idx, type, user_id)
-                VALUES (%s, %s, %s)
-            """, (til_idx_receive, type_receive, user_info['user_id']))
-        else:
-            cursor.execute("""
-                DELETE FROM likes 
-                WHERE til_idx = %s AND type = %s AND user_id = %s
-            """, (til_idx_receive, type_receive, user_info['user_id']))
-        
-        cursor.execute("""
-            SELECT COUNT(*) FROM likes 
-            WHERE til_idx = %s AND type = %s
-        """, (til_idx_receive, type_receive))
-        count = cursor.fetchone()[0]
-        
-    return jsonify({"result": "success", 'msg': 'updated', "count": count})
-
-@app.route('/user', methods=['POST'])
-def create_user():
-    user_id = request.form['user_id_give']
-    user_password = request.form['user_pw_give']
-    user_nickname = request.form['user_nickname_give']
-
-    pw_hash = hashlib.sha256(user_password.encode('utf-8')).hexdigest()
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                INSERT INTO users (user_id, user_password, user_nickname, github_id, 
-                                 user_profile_pic, user_profile_pic_real, user_profile_info)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, pw_hash, user_nickname, '', '', 
-                  'static/profile_pics/profile_placeholder.png', ''))
-            
-            return jsonify({'result': 'success'})
-        except pymysql.IntegrityError:
-            return jsonify({'result': 'fail', 'msg': '이미 존재하는 아이디입니다.'})
-
-@app.route('/user', methods=['GET'])
-@login_check
-def read_user():
-    user_info = get_user_info(g.user_id)
-    if user_info:
-        # 비밀번호 제거
-        user_info.pop('user_password', None)
-        return jsonify({'result': 'success', 'user_info': user_info})
-    return jsonify({'result': 'fail', 'msg': '사용자를 찾을 수 없습니다.'})
-
-@app.route('/login', methods=['POST'])
-def login():
-    user_id_receive = request.form['user_id_give']
-    user_pw_receive = request.form['user_pw_give']
-    pw_hash = hashlib.sha256(user_pw_receive.encode('utf-8')).hexdigest()
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("""
-            SELECT user_id FROM users 
-            WHERE user_id = %s AND user_password = %s
-        """, (user_id_receive, pw_hash))
-        result = cursor.fetchone()
-
-    if result:
-        payload = {
-            "id": user_id_receive,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=60 * 60 * 24)
-        }
-        token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-        return jsonify({'result': 'success', 'token': token})
-    else:
-        return jsonify({'result': 'fail', 'msg': '아이디/비밀번호가 일치하지 않습니다.'})
-
-@app.route('/check_dup', methods=['POST'])
-def check_dup():
-    user_id_receive = request.form['user_id_give']
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM users WHERE user_id = %s", (user_id_receive,))
-        exists = cursor.fetchone()[0] > 0
-        
-    return jsonify({'result': 'success', 'exists': exists})
-
-@app.route('/update_profile', methods=['POST'])
-@login_check
-def save_img():
-    user_id = g.user_id
-    name_receive = request.form["nickname_give"]
-    github_id_receive = request.form["github_id_give"]
-    about_receive = request.form["about_give"]
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        if 'file_give' in request.files:
-            file = request.files["file_give"]
-            filename = secure_filename(file.filename)
-            extension = filename.split(".")[-1]
-
-            file_path = os.environ.get("S3_URI", "") + str(filename)
-
-            # S3 업로드 (AWS 설정이 있는 경우)
-            if os.environ.get("AWS_ACCESS_KEY_ID"):
-                s3 = boto3.client('s3',
-                              aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-                              aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"))
-                s3.put_object(
-                    ACL="public-read",
-                    Bucket=os.environ.get("S3_BUCKET"),
-                    Body=file,
-                    Key=filename,
-                    ContentType=extension)
-            
-            cursor.execute("""
-                UPDATE users SET user_nickname = %s, github_id = %s, 
-                               user_profile_info = %s, user_profile_pic = %s, 
-                               user_profile_pic_real = %s
-                WHERE user_id = %s
-            """, (name_receive, github_id_receive, about_receive, 
-                  filename, file_path, user_id))
-        else:
-            cursor.execute("""
-                UPDATE users SET user_nickname = %s, github_id = %s, 
-                               user_profile_info = %s
-                WHERE user_id = %s
-            """, (name_receive, github_id_receive, about_receive, user_id))
-        
-    return jsonify({"result": "success", 'msg': '프로필을 업데이트했습니다.'})
+def get_flag():
+    # 임시로 0 반환 (실제 로직은 구현 필요)
+    return jsonify({'flag': 0})
 
 if __name__ == '__main__':
-    init_database()  # 데이터베이스 초기화
     app.run('0.0.0.0', port=5000, debug=True)
