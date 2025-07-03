@@ -218,10 +218,11 @@
         }
 
         function sign_out() {
-            $.removeCookie('mytoken', {path: '/'});
-            alert('로그아웃!')
-            window.location.href = "/"
+            localStorage.removeItem('token');
+            alert('로그아웃!');
+            window.location.href = "https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/logout?client_id=5lnrhu6079gksoonk690pf8ene&logout_uri=https://jeonghyein.shop/";
         }
+
     </script>
     <style>
         body {

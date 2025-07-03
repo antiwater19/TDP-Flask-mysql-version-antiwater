@@ -5,9 +5,11 @@ from werkzeug.utils import secure_filename
 import boto3
 import pymysql
 import json
+import requests
+import base64
 from contextlib import contextmanager
 
-# 🔑 AWS Secrets Manager에서 시크릿 불러오기 함수
+# AWS Secrets Manager에서 시크릿 불러오기 함수
 def get_secret(secret_name, region_name="ap-northeast-1"):
     session = boto3.session.Session()
     client = session.client('secretsmanager', region_name=region_name)
@@ -17,8 +19,8 @@ def get_secret(secret_name, region_name="ap-northeast-1"):
     return secret
 
 
-# 🔐 시크릿 로드 (시크릿 이름: flask/app1)
-secret = get_secret('flask/app1')
+# 시크릿 로드 (시크릿 이름: flask/app)
+secret = get_secret('flask/app')
 
 app = Flask(__name__)
 app.secret_key = secret['flask_secret']
@@ -632,6 +634,69 @@ def save_img():
             """, (name_receive, github_id_receive, about_receive, user_id))
         
     return jsonify({"result": "success", 'msg': '프로필을 업데이트했습니다.'})
+
+import requests, base64
+import jwt
+
+@app.route('/callback')
+def callback():
+    code = request.args.get('code')
+    client_id = '5lnrhu6079gksoonk690pf8ene'
+    client_secret = 'gdf9bnk8csskbfgmfecusofkbghqta5kke5ch51n3vec3mt32iv'
+    redirect_uri = 'https://jeonghyein.shop/callback'
+    token_url = 'https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/oauth2/token'
+
+    # base64 인코딩된 인증 헤더
+    auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+
+    data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': redirect_uri,
+    }
+
+    headers = {
+        'Authorization': f'Basic {auth_header}',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+
+    # 1. 토큰 요청
+    response = requests.post(token_url, data=data, headers=headers)
+    if response.status_code != 200:
+        return f"토큰 요청 실패: {response.text}", 400
+
+    tokens = response.json()
+    id_token = tokens['id_token']
+
+    # 2. ID Token 디코드
+    user_info = jwt.decode(id_token, options={"verify_signature": False})
+    user_id = user_info.get("email")
+    nickname = user_info.get("nickname", user_id)
+
+    # 3. 사용자 DB 존재 여부 확인 + 없으면 삽입
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+        if not cursor.fetchone():
+            cursor.execute("""
+                INSERT INTO users (user_id, user_password, user_nickname)
+                VALUES (%s, %s, %s)
+            """, (user_id, '', nickname))
+
+    # 4. 내부 JWT 발급
+    token = jwt.encode(
+        {"id": user_id, "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)},
+        app.secret_key,
+        algorithm="HS256"
+    )
+
+    # 5. 토큰을 포함한 redirect
+    return redirect(f"/callback_redirect?token={token}")
+
+    @app.route('/callback_redirect')
+    def callback_redirect():
+        return render_template('callback_redirect.html')
+
 
 if __name__ == '__main__':
     init_database()  # 데이터베이스 초기화

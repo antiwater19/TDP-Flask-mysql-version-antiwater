@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Redirect 중...</title></head>
+<body>
+<script>
+  const token = new URLSearchParams(window.location.search).get("token");
+  if (token) {
+    localStorage.setItem("token", token);
+    window.location.href = "/main_page";
+  } else {
+    alert("토큰이 없습니다.");
+    window.location.href = "/login";
+  }
+</script>
+</body>
+</html>

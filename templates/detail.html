@@ -140,11 +140,11 @@
                 success: function (response) {
 
                     let nickname = response['user_nickname']
-                    let githhub_id = response['githhub_id']
+                    let github_id = response['github_id']
                     let profile = response['user_profile_info']
 
                     $("#user-nickname").text(nickname);
-                    $("#user-githhub_id").text(githhub_id);
+                    $("#user-github_id").text(github_id);
                     $("#user-profile").text(profile);
 
                 }
@@ -163,7 +163,7 @@
                     for (let i = 0; i < all_comment.length; i++) {
                         let comment = all_comment[i]['til_comment']
                         let day = all_comment[i]['til_comment_day']
-                        let commenter = all_comment[i]['user_nickmane']
+                        let commenter = all_comment[i]['user_nickname']
                         let comment_idx = all_comment[i]['comment_idx']
 
 
@@ -323,10 +323,11 @@
         }
 
         function sign_out() {
-            $.removeCookie('mytoken', {path: '/'});
-            alert('로그아웃!')
-            window.location.href = "/"
+            localStorage.removeItem('token');
+            alert('로그아웃!');
+            window.location.href = "https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/logout?client_id=5lnrhu6079gksoonk690pf8ene&logout_uri=https://jeonghyein.shop/";
         }
+
     </script>
 
     <style>
@@ -389,7 +390,6 @@
             background-color: rgba(211, 211, 211, 0.2)
         }
 
-        }
         .new-box {
             border-color: DodgerBlue;
             background-color: rgba(30, 144, 255, 0.2);
@@ -425,8 +425,7 @@
 
         .hr6 {
             border: none;
-            border: 5px;
-            double orange;
+            border: 5px double orange;
         }
 
     </style>
@@ -466,9 +465,9 @@
                     <span>닉네임</span>
                     <div id="user-nickname" class="h5">user_nickname 내용</div>
                     <span>user_introduce</span>
-                    <div id="user-pfofile" class="h7 text-muted">user_introduce 내용</div>
+                    <div id="user-profile" class="h7 text-muted">user_introduce 내용</div>
                     <span>github_id</span>
-                    <div id="user-githhub_id" class="h7 text-muted">github_id 내용</div>
+                    <div id="user-github_id" class="h7 text-muted">github_id 내용</div>
                 </div>
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item">
