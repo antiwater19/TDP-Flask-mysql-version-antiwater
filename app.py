@@ -10,7 +10,7 @@ import base64
 from contextlib import contextmanager
 
 # AWS Secrets Manager에서 시크릿 불러오기 함수
-def get_secret(secret_name, region_name="ap-northeast-1"):
+def get_secret(secret_name, region_name="ap-northeast-3"):
     session = boto3.session.Session()
     client = session.client('secretsmanager', region_name=region_name)
 
@@ -643,7 +643,7 @@ def callback():
     code = request.args.get('code')
     client_id = '5lnrhu6079gksoonk690pf8ene'
     client_secret = 'gdf9bnk8csskbfgmfecusofkbghqta5kke5ch51n3vec3mt32iv'
-    redirect_uri = 'https://jeonghyein.shop/callback'
+    redirect_uri = 'https://www.jeonghyein.shop/callback'
     token_url = 'https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/oauth2/token'
 
     # base64 인코딩된 인증 헤더
@@ -693,9 +693,9 @@ def callback():
     # 5. 토큰을 포함한 redirect
     return redirect(f"/callback_redirect?token={token}")
 
-    @app.route('/callback_redirect')
-    def callback_redirect():
-        return render_template('callback_redirect.html')
+@app.route('/callback_redirect')
+def callback_redirect():
+    return render_template('callback_redirect.html')
 
 
 if __name__ == '__main__':
