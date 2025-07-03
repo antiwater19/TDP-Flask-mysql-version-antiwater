@@ -134,9 +134,20 @@
     }
 
     function sign_out() {
+        // JWT 제거
         localStorage.removeItem('token');
         alert('로그아웃!');
-        window.location.href = "https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/logout?client_id=5lnrhu6079gksoonk690pf8ene&logout_uri=https://www.jeonghyein.shop/";
+
+        // 카카오 세션 로그아웃
+        const kakaoLogoutURL = "https://kauth.kakao.com/oauth/logout?client_id=bb5d9191b7a9f20cbf5d585105002546&logout_redirect_uri=https://www.jeonghyein.shop/";
+
+        // 브라우저가 백그라운드에서 처리
+        const img = new Image();
+        img.src = kakaoLogoutURL;
+
+        // Cognito 세션 로그아웃 + 사이트로 리디렉션
+        const cognitoLogoutURL = "https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/logout?client_id=5lnrhu6079gksoonk690pf8ene&logout_uri=https://www.jeonghyein.shop/";
+        window.location.href = cognitoLogoutURL;
     }
 
 

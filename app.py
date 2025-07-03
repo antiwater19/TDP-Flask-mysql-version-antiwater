@@ -697,6 +697,10 @@ def callback():
 def callback_redirect():
     return render_template('callback_redirect.html')
 
+@app.route('/health')
+def health_check():
+    """헬스체크 엔드포인트"""
+    return jsonify({'status': 'healthy', 'message': 'Application is running'}), 200
 
 if __name__ == '__main__':
     init_database()  # 데이터베이스 초기화

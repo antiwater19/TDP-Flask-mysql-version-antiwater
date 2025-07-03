@@ -91,7 +91,7 @@
 
         .cont_forms_active_login {
             box-shadow: 1px 10px 30px -10px rgba(0, 0, 0, 0.5);
-            height: 420px;
+            height: 480px;
             top: 20px;
             left: 0px;
             -webkit-transition: all 0.5s;
@@ -271,6 +271,22 @@
                 transform: scale(1.5) translate(50px);
             }
         }
+        @keyframes animar_fondo {
+            from {
+                -webkit-transform: scale(1) translate(0px);
+                -moz-transform: scale(1) translate(0px);
+                -ms-transform: scale(1) translate(0px);
+                -o-transform: scale(1) translate(0px);
+                transform: scale(1) translate(0px);
+            }
+            to {
+                -webkit-transform: scale(1.5) translate(50px);
+                -moz-transform: scale(1.5) translate(50px);
+                -ms-transform: scale(1.5) translate(50px);
+                -o-transform: scale(1.5) translate(50px);
+                transform: scale(1.5) translate(50px);
+            }
+        }
 
         @-o-keyframes identifier {
             from {
@@ -341,9 +357,6 @@
             z-index: 2;
         }
 
-        .cont_forms_active_login > .cont_form_login {
-        }
-
         .cont_form_sign_up {
             position: absolute;
             width: 320px;
@@ -401,6 +414,60 @@
 
         .help {
             color: gray;
+        }
+
+        /* Social Login Button */
+        .social-login-container {
+            text-align: center;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .social-login-divider {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            color: #757575;
+            font-size: 14px;
+        }
+
+        .social-login-divider::before,
+        .social-login-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #ddd;
+        }
+
+        .social-login-divider::before {
+            margin-right: 10px;
+        }
+
+        .social-login-divider::after {
+            margin-left: 10px;
+        }
+
+        .btn_cognito {
+            background-color: #ff9500;
+            border: none;
+            padding: 10px;
+            width: 200px;
+            border-radius: 3px;
+            box-shadow: 1px 5px 20px -5px rgba(0, 0, 0, 0.4);
+            color: #fff;
+            margin: 10px auto;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: block;
+        }
+
+        .btn_cognito:hover {
+            background-color: #e6840a;
+            transform: translateY(-1px);
+            box-shadow: 1px 8px 25px -5px rgba(0, 0, 0, 0.6);
+            text-decoration: none;
+            color: #fff;
         }
     </style>
 
@@ -537,14 +604,14 @@
             });
         }
 
+        // Cognito login function
+        function cognitoLogin() {
+            window.location.href = "https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/login?response_type=code&client_id=5lnrhu6079gksoonk690pf8ene&redirect_uri=https://www.jeonghyein.shop/callback&scope=email+openid+profile";
+        }
+
     </script>
 </head>
 <body>
-<a href="https://ap-northeast-3jtaeqmgl5.auth.ap-northeast-3.amazoncognito.com/login?response_type=code&client_id=5lnrhu6079gksoonk690pf8ene&redirect_uri=https://www.jeonghyein.shop/callback&scope=email+openid+profile">
-  <button class="btn_login">Cognito 로그인</button>
-</a>
-
-
 
 <div class="cotn_principal">
     <div class="cont_central">
@@ -587,11 +654,19 @@
                 </div>
 
                 <div class="cont_form_login">
-                    <a href="#" onclick="ocular_login_sign_in()"><i class="material-icons">&#xE5C4;</i></a>
+                    <a href="#" onclick="ocular_login_sign_up()"><i class="material-icons">&#xE5C4;</i></a>
                     <h2>LOGIN</h2>
                     <label for="user_id"></label><input type="text" id="user_id" placeholder="ID"/>
                     <label for="user_pw"></label><input type="password" id="user_pw" placeholder="Password"/>
                     <button class="btn_login" onclick="login()">LOGIN</button>
+                    
+                    <!-- Social Login Section -->
+                    <div class="social-login-container">
+                        <div class="social-login-divider">또는</div>
+                        <a href="javascript:void(0)" onclick="cognitoLogin()" class="btn_cognito">
+                            Cognito Login
+                        </a>
+                    </div>
                 </div>
 
                 <div class="cont_form_sign_up">
