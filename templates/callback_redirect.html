@@ -1,12 +1,18 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Redirect 중...</title></head>
+<head>
+  <meta charset="UTF-8">
+  <title>Redirect 중...</title>
+</head>
 <body>
 <script>
   const token = new URLSearchParams(window.location.search).get("token");
   if (token) {
     localStorage.setItem("token", token);
-    window.location.href = "/main_page";
+    // 저장 후 리디렉션을 약간 지연하여 토큰이 안정적으로 저장되도록 보장
+    setTimeout(() => {
+      window.location.href = "/main_page";
+    }, 100);
   } else {
     alert("토큰이 없습니다.");
     window.location.href = "/login";

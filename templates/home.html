@@ -51,16 +51,16 @@
     });
 
     function read_flag() {
+        let flag = 0;
         $.ajax({
-                type: "GET",
-                url: "/flag",
-                data: {},
-                async: false,
-                success: function (response) {
-                    flag = response['flag'];
-
-                }
-            });
+            type: "GET",
+            url: "/flag",
+            data: {},
+            async: false,
+            success: function (response) {
+                flag = response['flag'];
+            }
+        });
         return flag;
     }
 

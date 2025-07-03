@@ -44,7 +44,7 @@ DATABASE_CONFIG = {
 #     'autocommit': True
 # }
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+SECRET_KEY = app.secret_key
 
 @contextmanager
 def get_db_connection():
